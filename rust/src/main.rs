@@ -75,11 +75,16 @@ impl Universe {
         }
     }
 
-    fn update_positions(&mut self, duration: f32) {
+    fn update_positions(&self, duration: f32) {
         let mut v = self.write().unwrap();
         for b in v.iter_mut() {
             b.update_position(duration);
         }
+    }
+
+    fn step(&self, duration: f32) {
+        self.update_velocities(duration);
+        self.update_positions(duration);
     }
 }
 
@@ -90,7 +95,7 @@ fn main() {
         let mut rng = StdRng::from_seed([0; 32]);
         move || -> f32 { rng.gen() }
     };
-    let mut universe = Universe(Arc::new(RwLock::new((0..1000).map(|_| {
+    let universe = Universe(Arc::new(RwLock::new((0..1000).map(|_| {
         Body {
             position: Vector3::new(r() * 1e9, r() * 1e9, r() * 1e9),
             velocity: Vector3::new(r() * 5e2, r() * 5e2, r() * 5e2),
@@ -99,15 +104,14 @@ fn main() {
     }).collect::<Vec<Body>>())));
 
     for _ in 0..6000 {
-        universe.update_velocities(step);
-        universe.update_positions(step);
+        universe.step(step)
     }
 }
 
 #[test]
 fn two_body_test() {
     let step = 0.1;
-    let mut universe = vec![
+    let universe = Universe(Arc::new(RwLock::new(vec![
         // the moon
         Body {
             position: Vector3::new(0., 0., 0.),
@@ -120,12 +124,12 @@ fn two_body_test() {
             velocity: Vector3::new(0., 1673., 0.),
             mass: 1000.
         }
-    ];
-    for i in 0..1_000_000 {
-        universe.update_velocities(step);
-        universe.update_positions(step);
-        let d = Vector3::distance(&universe[0].position, &universe[1].position);
-        assert!(d >=  1_737_100.);
-        assert!(d <= 10_000_000.);
+    ])));
+    for _ in 0..1_000_000 {
+        universe.step(step);
+        let v = universe.read().unwrap();
+        let d = Vector3::distance(&v[0].position, &v[1].position);
+        assert!(d >=      1_737_100.);
+        assert!(d <= 10_000_000_000.);
     }
 }

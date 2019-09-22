@@ -115,4 +115,35 @@ impl Vector3 {
     pub fn dotp(a: &Vector3, b: &Vector3) -> f32 {
         a.x * b.x + a.y * b.y + a.z * b.z
     }
+
+    #[allow(dead_code)]
+    pub fn distance_squared(a: &Vector3, b: &Vector3) -> f32 {
+        f32::powi(a.x - b.x, 2) + f32::powi(a.y - b.y, 2) + f32::powi(a.z - b.z, 2)
+    }
+
+    #[allow(dead_code)]
+    pub fn distance(a: &Vector3, b: &Vector3) -> f32 {
+        f32::sqrt(Vector3::distance_squared(a, b))
+    }
+
+    #[allow(dead_code)]
+    pub fn normalized(self) -> Self {
+        let d = f32::sqrt(
+            f32::powi(self.x, 2) + f32::powi(self.y, 2) + f32::powi(self.z, 2)
+        );
+        self * (1. / d)
+    }
+
+    #[allow(dead_code)]
+    pub fn normalize(&mut self) {
+        let d = f32::sqrt(
+            f32::powi(self.x, 2) + f32::powi(self.y, 2) + f32::powi(self.z, 2)
+        );
+        *self *= 1. / d;
+    }
+
+    #[allow(dead_code)]
+    pub fn direction(a: Self, b: Self) -> Self {
+        (a - b).normalized()
+    }
 }
