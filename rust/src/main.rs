@@ -125,11 +125,11 @@ fn two_body_test() {
             mass: 1000.
         }
     ])));
-    for _ in 0..1_000_000 {
+    for _ in 0..1_000_000_000 {
         universe.step(step);
         let v = universe.read().unwrap();
         let d = Vector3::distance(&v[0].position, &v[1].position);
-        assert!(d >=      1_737_100.);
-        assert!(d <= 10_000_000_000.);
+        assert!(d >=         1_737_100.);
+        assert!(d <= 1_000_000_000_000.);
     }
 }
