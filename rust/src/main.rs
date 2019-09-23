@@ -61,9 +61,10 @@ impl Universe {
         self.read().unwrap().len()
     }
 
-    fn update_velocities(&self, duration: f32) {
+    fn update_velocities(&self, dvs: &mut Vec<Vector3>, duration: f32) {
         let len = self.len();
-        let dvs = (0..len).into_par_iter().map(|i| {
+        dvs.clear();
+        dvs.par_extend((0..len).into_par_iter().map(|i| {
             let v = self.read().unwrap();
             let mut dv = Vector3::new(0., 0., 0.);
             for j in 0..i {
@@ -73,7 +74,7 @@ impl Universe {
                 update_one_dv_step(&v[i], &v[j], &mut dv, duration);
             }
             dv
-        }).collect::<Vec<Vector3>>();
+        }));
         let mut v = self.write().unwrap();
         for i in 0..len {
             v[i].velocity += dvs[i];
@@ -87,20 +88,25 @@ impl Universe {
         }
     }
 
-    fn step(&self, duration: f32) {
-        self.update_velocities(duration);
+    fn step(&self, dvs: &mut Vec<Vector3>, duration: f32) {
+        self.update_velocities(dvs, duration);
         self.update_positions(duration);
     }
 }
 
+// 8000 bodies for 10 minutes
+const BODIES: usize = 8000;
+const STEP: f32 = 0.1;
+const STEPS: usize = 6000;
+
 fn main() {
     use rand::prelude::*;
-    let step = 0.1;
+    let mut dvs = Vec::with_capacity(BODIES);
     let mut r = {
         let mut rng = StdRng::from_seed([0; 32]);
         move || -> f32 { rng.gen() }
     };
-    let universe = Universe(Arc::new(RwLock::new((0..1000).map(|_| {
+    let universe = Universe(Arc::new(RwLock::new((0..BODIES).map(|_| {
         Body {
             position: Vector3::new(r() * 1e9, r() * 1e9, r() * 1e9),
             velocity: Vector3::new(r() * 5e2, r() * 5e2, r() * 5e2),
@@ -108,13 +114,14 @@ fn main() {
         }
     }).collect::<Vec<Body>>())));
 
-    for _ in 0..6000 {
-        universe.step(step)
+    for _ in 0..STEPS {
+        universe.step(&mut dvs, STEP)
     }
 }
 
 #[test]
 fn two_body_test() {
+    let mut dvs = Vec::with_capacity(2);
     let step = 0.1;
     let universe = Universe(Arc::new(RwLock::new(vec![
         // the moon
@@ -131,7 +138,7 @@ fn two_body_test() {
         }
     ])));
     for _ in 0..1_000_000_000 {
-        universe.step(step);
+        universe.step(&mut dvs, step);
         let v = universe.read().unwrap();
         let d = Vector3::distance(&v[0].position, &v[1].position);
         assert!(d >=         1_737_100.);
