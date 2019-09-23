@@ -6,11 +6,14 @@ sys     0m2.722s
 
 
 */
-
+#![feature(core_intrinsics)]
 mod vec3;
 use vec3::Vector3;
 use rayon::prelude::*;
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    intrinsics::{fmul_fast, fdiv_fast}
+};
 
 const G: f32 = 6.673e-11;
 
@@ -28,16 +31,18 @@ impl Body {
 }
 
 fn update_one_dv_step(b0: &Body, b1: &Body, dv: &mut Vector3, duration: f32) {
-    // compute gravity
-    let r = b0.position - b1.position;
-    let rsquared = Vector3::dotp(&r, &r);
-    let fg = G * b0.mass * b1.mass / rsquared;
+    unsafe {
+        // compute gravity
+        let r = b0.position - b1.position;
+        let rsquared = Vector3::dotp(&r, &r);
+        let fg = fdiv_fast(fmul_fast(fmul_fast(G, b0.mass), b1.mass), rsquared);
 
-    // compute the normal vector pointing from i to j
-    let normal = 1. / f32::sqrt(rsquared);
-    
-    // update the velocity for this step
-    *dv += r * normal * fg * duration;
+        // compute the normal vector pointing from i to j
+        let normal = fdiv_fast(1., f32::sqrt(rsquared));
+        
+        // update the velocity for this step
+        *dv += r * normal * fg * duration;
+    }
 }
 
 #[derive(Debug, Clone)]
