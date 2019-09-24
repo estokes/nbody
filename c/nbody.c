@@ -35,38 +35,37 @@ typedef struct nb_ctxt {
 #define BODIES 8000
 #define STEP_DURATION 0.1
 
+void compute_forces(nb_ctxt *ctx, int i, int j, float *dvx, float *dvy, float *dvz) {
+  float r1, r2, r3, rsquared, accel, normal;
+
+  /* compute the force of gravity */                          
+  r1 = (ctx->position[j*3 + 0] - ctx->position[i*3 + 0]);   
+  r2 = (ctx->position[j*3 + 1] - ctx->position[i*3 + 1]);   
+  r3 = (ctx->position[j*3 + 2] - ctx->position[i*3 + 2]);   
+  rsquared = r1*r1 + r2*r2 + r3*r3;                         
+  accel = (G * ctx->mass[j]) / rsquared;                    
+                                                                
+  /* compute the normal vector pointing from i to j */      
+  normal = 1 / sqrtf(rsquared);                             
+                                                                
+  /* now update the velocity */                             
+  *dvx += r1 * normal * accel * STEP_DURATION;                    
+  *dvy += r2 * normal * accel * STEP_DURATION;                    
+  *dvz += r3 * normal * accel * STEP_DURATION;
+}
+
 void step(nb_ctxt *ctx) {
-  float r1, r2, r3, rsquared, accel, normal, dvx = 0, dvy = 0, dvz = 0;
   int i, j;
 
   /* update velocities */
   for(i = ctx->th_id; i < BODIES; i+= NTHREADS) {
-    /* This is necessary in order to avoid branches inside the loop,
-       which will prevent the loop from vectorizing. And it's
-       necessary to skip computing an objects force on itself because
-       that will always be zero, resulting in NaN. */
-
-#define LOOP                                                    \
-    /* compute the force of gravity */                          \
-      r1 = (ctx->position[j*3 + 0] - ctx->position[i*3 + 0]);   \
-      r2 = (ctx->position[j*3 + 1] - ctx->position[i*3 + 1]);   \
-      r3 = (ctx->position[j*3 + 2] - ctx->position[i*3 + 2]);   \
-      rsquared = r1*r1 + r2*r2 + r3*r3;                         \
-      accel = (G * ctx->mass[j]) / rsquared;                    \
-                                                                \
-      /* compute the normal vector pointing from i to j */      \
-      normal = 1 / sqrtf(rsquared);                             \
-                                                                \
-      /* now update the velocity */                             \
-      dvx += r1 * normal * accel * STEP_DURATION;                    \
-      dvy += r2 * normal * accel * STEP_DURATION;                    \
-      dvz += r3 * normal * accel * STEP_DURATION;                    \
+    float dvx = 0, dvy = 0, dvz = 0;
 
     for(j = 0; j < i; j++) {
-      LOOP
+      compute_forces(ctx, i, j, &dvx, &dvy, &dvz);
     }
     for(j = i + 1; j < BODIES; j++) {
-      LOOP
+      compute_forces(ctx, i, j, &dvx, &dvy, &dvz);
     }
 
     ctx->velocity[i*3 + 0] += dvx;
