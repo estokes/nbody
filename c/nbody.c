@@ -1,15 +1,7 @@
 /* 
-yay faster than julia
+8000 bodies for 10 minutes
+8 core Power9 3.8 GHz
 
-1000 bodies for 10 min
-real	0m45.394s
-user	0m45.346s
-sys	0m0.004s
-
-8000 bodies for 10 min
-real	52m28.486s
-user	52m25.458s
-sys	0m0.012s
 */
 
 #include<stdlib.h>
@@ -160,7 +152,8 @@ void many_body_test() {
   }
 
   for(i = 0; i < NTHREADS; i++)
-    if(pthread_create(&tids[i], NULL, &start_steps, &ctxt[i]) != 0) perror("pthread_create");
+    if(pthread_create(&tids[i], NULL, &start_steps, &ctxt[i]) != 0)
+      perror("pthread_create");
 
   /* wait for the calculation to finish */
   for(i = 0; i < NTHREADS; i++)

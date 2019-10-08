@@ -1,9 +1,8 @@
 /*
 8 core power9 @ 3.8Ghz
-real    0m8.067s
-user    4m13.146s
-sys     0m2.722s
-
+real    4m4.275s
+user    129m54.588s
+sys     0m7.761s
 
 */
 #![feature(core_intrinsics)]
