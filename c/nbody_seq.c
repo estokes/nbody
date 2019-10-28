@@ -2,36 +2,12 @@
 8000 bodies simulated for 10 minutes 100ms step granularity, about 8.83E12 fp ops.
 
 gcc 9.2
-Intel Core i7 7820X 8 cores 16 threads 4 GHz all core
-gcc -DNTHREADS=16 -O3 -ffast-math -march=skylake-avx512 -o nbody nbody.c -lpthread -lm
-real    0m48.137s
-user    12m24.197s
-sys     0m0.359s
-183.9 GFlops
-
-gcc 9.2
 IBM POWER9 8 cores 32 threads 3.8 GHz all core
-gcc -DNTHREADS=32 -O3 -ffast-math -mcpu=power9 -o nbody nbody.c -lpthread -lm
-real    2m56.109s (176s)
-user    91m47.160s
-sys     0m0.917s
-50.1 GFlops
-
-gcc 9.1
-Intel Core i7 8550U 4 cores 8 threads 2.5 GHz all core 4 GHz max
-gcc -DNTHREADS=8 -O3 -ffast-math -march=skylake -o nbody nbody.c -lpthread -lm
-real    2m59.049s (179s)
-user    21m42.140s
-sys     0m1.072s
-49.3 GFlops
-
-gcc 6.3
-Intel Core i7 4770K 4 cores 8 threads 3.8 GHz all core
-gcc -DNTHREADS=8 -O3 -ffast-math -march=haswell -o nbody nbody.c -lpthread -lm
-real    3m8.877s (189s)
-user    25m5.316s
-sys     0m0.308s
-46.7 GFlops
+gcc -O3 -ffast-math -mcpu=power9 -o nbody nbody.c -lm
+real    32m25.386s
+user    32m25.559s
+sys     0m0.010s
+4.54 GFlops
 
 */
 
