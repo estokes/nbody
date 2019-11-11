@@ -66,7 +66,7 @@ impl UniverseInner {
             dvy += dy;
             dvz += dz
         }
-        for j in i+1.. {
+        for j in i+1..self.position.x.len() {
             let (dx, dy, dz) = self.compute_dv_step(p0x, p0y, p0z, m0, j, duration);
             dvx += dx;
             dvy += dy;
