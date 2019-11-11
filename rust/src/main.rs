@@ -6,49 +6,81 @@ sys     0m7.761s
 
 */
 #![feature(core_intrinsics)]
-mod vec3;
-use vec3::Vector3;
 use rayon::prelude::*;
 use std::{
     sync::{Arc, RwLock},
-    intrinsics::{fmul_fast, fdiv_fast}
+    intrinsics::{fmul_fast, fdiv_fast, fsub_fast, fadd_fast}
 };
 
 const G: f32 = 6.673e-11;
 
-#[derive(Debug, Clone, Copy)]
-struct Body {
-    position: Vector3,
-    velocity: Vector3,
-    mass: f32,
+#[derive(Debug)]
+struct V3v {
+    x: Vec<f32>,
+    y: Vec<f32>,
+    z: Vec<f32>,
 }
 
-impl Body {
-    fn update_position(&mut self, duration: f32) {
-        self.position += self.velocity * duration
-    }
+
+#[derive(Debug)]
+struct UniverseInner {
+    position: V3v,
+    velocity: V3v,
+    mass: Vec<f32>
 }
 
-fn update_one_dv_step(b0: &Body, b1: &Body, dv: &mut Vector3, duration: f32) {
-    unsafe {
+impl UniverseInner {
+    #[inline(always)]
+    unsafe fn compute_dv_step(
+        &self, p0x: f32, p0y: f32, p0z: f32, m0: f32, j: usize, duration: f32
+    ) -> (f32, f32, f32) {
+        let (p1x, p1y, p1z, m1) = (
+            self.position.x[j], self.position.y[j], self.position.z[j], self.mass[j]
+        );
         // compute gravity
-        let r = b0.position - b1.position;
-        let rsquared = Vector3::dotp(&r, &r);
-        let fg = fdiv_fast(fmul_fast(fmul_fast(G, b0.mass), b1.mass), rsquared);
+        let (rx, ry, rz) = (
+            fsub_fast(p0x, p1x), fsub_fast(p0y, p1y), fsub_fast(p0z, p1z)
+        );
+        let rsquared = fadd_fast(
+            fmul_fast(rx, rx),
+            fadd_fast(fmul_fast(ry, ry), fmul_fast(rz, rz))
+        );
+        let fg = fdiv_fast(fmul_fast(fmul_fast(G, m0), m1), rsquared);
 
         // compute the normal vector pointing from i to j
         let normal = fdiv_fast(1., f32::sqrt(rsquared));
         
         // update the velocity for this step
-        *dv += r * normal * fg * duration;
+        let nfd = normal * fg * duration;
+        (rx * nfd, ry * nfd, rz * nfd)
+    }
+
+    unsafe fn compute_dv(&self, i: usize, duration: f32) -> (f32, f32, f32) {
+        let (mut dvx, mut dvy, mut dvz) = (0., 0., 0.);
+        let (p0x, p0y, p0z, m0) = (
+            self.position.x[i], self.position.y[i], self.position.z[i], self.mass[i]
+        );
+        for j in 0..i {
+            let (dx, dy, dz) = self.compute_dv_step(p0x, p0y, p0z, m0, j, duration);
+            dvx += dx;
+            dvy += dy;
+            dvz += dz
+        }
+        for j in i+1.. {
+            let (dx, dy, dz) = self.compute_dv_step(p0x, p0y, p0z, m0, j, duration);
+            dvx += dx;
+            dvy += dy;
+            dvz += dz
+        }
+        (dvx, dvy, dvz)
     }
 }
 
 #[derive(Debug, Clone)]
-struct Universe(Arc<RwLock<Vec<Body>>>);
+struct Universe(Arc<RwLock<UniverseInner>>);
 
 impl std::ops::Deref for Universe {
-    type Target = Arc<RwLock<Vec<Body>>>;
+    type Target = Arc<RwLock<UniverseInner>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -57,37 +89,39 @@ impl std::ops::Deref for Universe {
 
 impl Universe {
     fn len(&self) -> usize {
-        self.read().unwrap().len()
+        self.read().unwrap().position.x.len()
     }
 
-    fn update_velocities(&self, dvs: &mut Vec<Vector3>, duration: f32) {
+    fn update_velocities(&self, dvs: &mut Vec<(f32, f32, f32)>, duration: f32) {
         let len = self.len();
-        dvs.clear();
-        dvs.par_extend((0..len).into_par_iter().map(|i| {
-            let v = self.read().unwrap();
-            let mut dv = Vector3::new(0., 0., 0.);
-            for j in 0..i {
-                update_one_dv_step(&v[i], &v[j], &mut dv, duration);
-            }
-            for j in i+1..len {
-                update_one_dv_step(&v[i], &v[j], &mut dv, duration);
-            }
-            dv
-        }));
+        (0..len).into_par_iter()
+            .map(|i| unsafe { self.read().unwrap().compute_dv(i, duration) })
+            .collect_into_vec(dvs);
         let mut v = self.write().unwrap();
         for i in 0..len {
-            v[i].velocity += dvs[i];
+            unsafe {
+                v.velocity.x[i] = fadd_fast(v.velocity.x[i], dvs[i].0);
+                v.velocity.y[i] = fadd_fast(v.velocity.y[i], dvs[i].1);
+                v.velocity.z[i] = fadd_fast(v.velocity.z[i], dvs[i].2);
+            }
         }
     }
 
     fn update_positions(&self, duration: f32) {
         let mut v = self.write().unwrap();
-        for b in v.iter_mut() {
-            b.update_position(duration);
+        for i in 0..v.position.x.len() {
+            unsafe {
+                v.position.x[i] =
+                    fadd_fast(v.position.x[i], fmul_fast(v.velocity.x[i], duration));
+                v.position.y[i] =
+                    fadd_fast(v.position.y[i], fmul_fast(v.velocity.y[i], duration));
+                v.position.z[i] =
+                    fadd_fast(v.position.z[i], fmul_fast(v.velocity.z[i], duration));
+            }
         }
     }
 
-    fn step(&self, dvs: &mut Vec<Vector3>, duration: f32) {
+    fn step(&self, dvs: &mut Vec<(f32, f32, f32)>, duration: f32) {
         self.update_velocities(dvs, duration);
         self.update_positions(duration);
     }
@@ -105,14 +139,19 @@ fn main() {
         let mut rng = StdRng::from_seed([0; 32]);
         move || -> f32 { rng.gen() }
     };
-    let universe = Universe(Arc::new(RwLock::new((0..BODIES).map(|_| {
-        Body {
-            position: Vector3::new(r() * 1e9, r() * 1e9, r() * 1e9),
-            velocity: Vector3::new(r() * 5e2, r() * 5e2, r() * 5e2),
-            mass: r() * 1e22
-        }
-    }).collect::<Vec<Body>>())));
-
+    let universe = Universe(Arc::new(RwLock::new(UniverseInner {
+        position: V3v {
+            x: (0..BODIES).map(|_| r() * 1e9).collect(),
+            y: (0..BODIES).map(|_| r() * 1e9).collect(),
+            z: (0..BODIES).map(|_| r() * 1e9).collect(),
+        },
+        velocity: V3v {
+            x: (0..BODIES).map(|_| r() * 5e2).collect(),
+            y: (0..BODIES).map(|_| r() * 5e2).collect(),
+            z: (0..BODIES).map(|_| r() * 5e2).collect(),
+        },
+        mass: (0..BODIES).map(|_| r() * 1e22).collect()
+    })));
     for _ in 0..STEPS {
         universe.step(&mut dvs, STEP)
     }
@@ -122,24 +161,27 @@ fn main() {
 fn two_body_test() {
     let mut dvs = Vec::with_capacity(2);
     let step = 0.1;
-    let universe = Universe(Arc::new(RwLock::new(vec![
-        // the moon
-        Body {
-            position: Vector3::new(0., 0., 0.),
-            velocity: Vector3::new(0., 0., 0.),
-            mass: 7.34e22
+    let universe = Universe(Arc::new(RwLock::new(UniverseInner {
+        position: V3v {
+            x: vec![0., 1_750_000.],
+            y: vec![0., 0.,],
+            z: vec![0., 0.]
         },
-        // 1000kg meteor
-        Body {
-            position: Vector3::new(1_750_000., 0., 0.),
-            velocity: Vector3::new(0., 1673., 0.),
-            mass: 1000.
-        }
-    ])));
+        velocity: V3v {
+            x: vec![0., 0.],
+            y: vec![0., 1673.],
+            z: vec![0., 0.],
+        },
+        mass: vec![7.34e22, 1000.]
+    })));
     for _ in 0..1_000_000_000 {
         universe.step(&mut dvs, step);
         let v = universe.read().unwrap();
-        let d = Vector3::distance(&v[0].position, &v[1].position);
+        let d = f32::sqrt(
+            f32::powi(v.position.x[0] - v.position.x[1], 2) +
+            f32::powi(v.position.y[0] - v.position.y[1], 2) +
+            f32::powi(v.position.z[0] - v.position.z[1], 2)
+        );
         assert!(d >=         1_737_100.);
         assert!(d <= 1_000_000_000_000.);
     }
